@@ -1,7 +1,9 @@
 // Se ejecuta antes del build en Vercel: frena el despliegue con un mensaje claro si falta configuración.
 const faltan = [];
 if (process.env.VERCEL) {
-  if (!(process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL)) faltan.push("Base de datos: conectá Turso en Vercel → Storage (crea TURSO_DATABASE_URL y TURSO_AUTH_TOKEN)");
+  const hayBase = Object.keys(process.env).some((k) => /DATABASE_URL$/.test(k) && /^libsql:\/\//.test(process.env[k] ?? ""));
+  console.log("Variables de base detectadas:", Object.keys(process.env).filter((k) => /DATABASE|TURSO|LIBSQL/.test(k)).join(", ") || "ninguna");
+  if (!hayBase) faltan.push("Base de datos: conectá Turso en Vercel → Storage (crea TURSO_DATABASE_URL y TURSO_AUTH_TOKEN)");
   if (!process.env.AUTH_SECRET) faltan.push("AUTH_SECRET: agregalo en Settings → Environment Variables (un texto largo y aleatorio)");
 }
 if (faltan.length) {

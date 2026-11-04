@@ -1,15 +1,13 @@
 import { drizzle } from "drizzle-orm/libsql";
 import { createClient } from "@libsql/client";
 import * as schema from "./schema";
+import { dbEnv } from "./env";
 
 const globalForDb = globalThis as unknown as { __db?: ReturnType<typeof drizzle<typeof schema>> };
 
 function make() {
-  const client = createClient({
-    // Turso (integración de Vercel) define TURSO_DATABASE_URL / TURSO_AUTH_TOKEN
-    url: process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL || "file:data/obrapp.db",
-    authToken: process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN || undefined,
-  });
+  const { url, authToken } = dbEnv();
+  const client = createClient({ url, authToken });
   return drizzle(client, { schema });
 }
 
