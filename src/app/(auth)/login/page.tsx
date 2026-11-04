@@ -10,6 +10,9 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
       <p className="muted mb-6">Accedé a tus obras.</p>
       {ok && <p className="mb-4 rounded-md bg-brand-50 px-3 py-2 text-sm text-brand-700">{ok}</p>}
       <AuthForm modo="login" action={iniciarSesion} next={next} />
+      <a href="/acceso-obra" className="mt-4 flex items-center justify-between rounded-xl border border-zinc-200 px-4 py-3 text-[15px] hover:bg-zinc-50">
+        <span><b>¿Sos del equipo de obra?</b><span className="block text-sm text-zinc-500">Entrá con tu DNI y PIN, sin email</span></span><span className="text-zinc-400">→</span>
+      </a>
       {modoDemo() && (
         <div className="mt-8 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <div className="text-sm font-medium text-amber-900">Entorno de prueba</div>

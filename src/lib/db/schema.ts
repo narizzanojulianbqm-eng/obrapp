@@ -13,6 +13,9 @@ export const users = sqliteTable("users", {
   plan: text("plan", { enum: ["gratuito", "profesional", "estudio"] }).notNull().default("gratuito"),
   telefono: text("telefono"),
   avisosEmail: integer("avisos_email", { mode: "boolean" }).notNull().default(true),
+  // acceso simple para el equipo de obra: DNI + PIN de 6 dígitos (sin email ni contraseña)
+  dni: text("dni").unique(),
+  pinHash: text("pin_hash"),
   createdAt: createdAt(),
 });
 
@@ -77,6 +80,8 @@ export const obras = sqliteTable("obras", {
   ivaPct: real("iva_pct").notNull().default(0),
   cuadrillaHHdia: real("cuadrilla_hh_dia").notNull().default(16), // horas-hombre por día de una cuadrilla tipo
   clientePuedeVerDetalle: integer("cliente_puede_ver_detalle", { mode: "boolean" }).notNull().default(false),
+  // secciones que el arquitecto habilita en el portal del cliente
+  portalCliente: text("portal_cliente", { mode: "json" }).$type<Partial<Record<"cronograma" | "avances" | "presupuesto" | "compras" | "documentos" | "mensajes" | "asistente", boolean>>>().notNull().default({}),
   createdAt: createdAt(),
 });
 
@@ -423,3 +428,23 @@ export const cambios = sqliteTable("cambios", {
   origen: text("origen", { enum: ["web", "whatsapp"] }).notNull().default("web"),
   createdAt: createdAt(),
 });
+
+/** Parte diario de obra: quiénes trabajaron, cuántas horas, qué se hizo, clima, problema y fotos. */
+export const partesDiarios = sqliteTable(
+  "partes_diarios",
+  {
+    id: id(),
+    obraId: text("obra_id").notNull().references(() => obras.id, { onDelete: "cascade" }),
+    autorId: text("autor_id").notNull().references(() => users.id),
+    fecha: text("fecha").notNull(), // YYYY-MM-DD
+    personas: integer("personas").notNull().default(0),
+    horas: real("horas").notNull().default(0), // horas por persona
+    clima: text("clima", { enum: ["bueno", "nublado", "lluvia", "viento", "calor", "frio"] }).notNull().default("bueno"),
+    trabajos: text("trabajos"),
+    problema: text("problema"),
+    fotos: text("fotos", { mode: "json" }).$type<string[]>().notNull().default([]),
+    origen: text("origen", { enum: ["web", "whatsapp"] }).notNull().default("web"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("partes_obra_fecha_idx").on(t.obraId, t.fecha)],
+);

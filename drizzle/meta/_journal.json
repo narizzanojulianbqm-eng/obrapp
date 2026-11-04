@@ -8,6 +8,13 @@
       "when": 1793830350104,
       "tag": "0000_inicial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793834802287,
+      "tag": "0001_dni_portal_partes",
+      "breakpoints": true
     }
   ]
 }

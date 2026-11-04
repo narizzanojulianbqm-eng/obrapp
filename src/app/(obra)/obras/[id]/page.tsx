@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { requireObra } from "@/lib/access";
 import { resumenObra } from "@/lib/queries";
 import { db, schema } from "@/lib/db";
@@ -9,6 +9,10 @@ import { ars, fechaHora, num, pct } from "@/lib/format";
 import { curvaPrevista, finDeObra, avancePrevistoItem } from "@/lib/engine/calculos";
 import { diasCorridos, fechaLarga, hoyISO, sumarHabiles } from "@/lib/engine/calendario";
 import { SISTEMAS, TIPOS_OBRA } from "@/lib/engine/plantillas";
+import { clienteVe } from "@/lib/portal";
+import { hoyAR } from "@/lib/format";
+
+const sumarDiasCorridos = (f: string, d: number) => { const x = new Date(`${f}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10); };
 
 export default async function ResumenObra({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ nueva?: string }> }) {
   const { id } = await params;
@@ -35,12 +39,20 @@ export default async function ResumenObra({ params, searchParams }: { params: Pr
 
   // ───── Obrero: interfaz simple y móvil ─────
   if (rol === "obrero") {
+    const parteHoy = await db.query.partesDiarios.findFirst({ where: and(eq(schema.partesDiarios.obraId, id), eq(schema.partesDiarios.fecha, hoyAR())) });
     const mias = r.items.filter((i) => !i.esHito && i.avanceReal < 100 && (!i.asignadoA || i.asignadoA === miembroId) && i.inicio && i.inicio <= enDosSemanas);
     return (
       <div className="mx-auto max-w-xl space-y-4">
         <PageHeader title={obra.nombre} subtitle={[obra.direccion, obra.localidad].filter(Boolean).join(", ")} />
+        <Link href={`${b}/partes`} className={`flex items-center justify-between rounded-2xl p-5 ${parteHoy ? "bg-brand-50 text-brand-800" : "bg-brand-700 text-white"}`}>
+          <span>
+            <span className="block text-lg font-semibold">{parteHoy ? "✓ Parte de hoy cargado" : "Cargar el parte del día"}</span>
+            <span className="block text-sm opacity-80">{parteHoy ? "Si pasó algo más, podés sumar otro." : "Quiénes vinieron, el clima y qué se hizo. 1 minuto."}</span>
+          </span>
+          <span className="text-2xl">→</span>
+        </Link>
         <div className="grid grid-cols-2 gap-3">
-          <Link href={`${b}/seguimiento`} className="btn-primary py-4 text-base">Informar avance</Link>
+          <Link href={`${b}/seguimiento`} className="btn-secondary py-4 text-base">Informar avance</Link>
           <Link href={`${b}/solicitudes`} className="btn-secondary py-4 text-base">Pedir material</Link>
           <Link href={`${b}/seguimiento?problema=1`} className="btn-secondary py-4 text-base">Informar problema</Link>
           <Link href={`${b}/mensajes?canal=obra`} className="btn-secondary py-4 text-base">Hablar con arquitecto</Link>
@@ -65,6 +77,8 @@ export default async function ResumenObra({ params, searchParams }: { params: Pr
   }
 
   const esArq = rol === "arquitecto";
+  const veP = esArq || clienteVe(obra, "presupuesto");
+  const veC = esArq || clienteVe(obra, "compras");
   const precioVenta = r.presupuesto.total;
   const adicionales = await db.query.adicionales.findMany({ where: eq(schema.adicionales.obraId, id) });
   const totalAdicionales = adicionales.filter((a) => a.estado === "aprobado").reduce((a, x) => a + x.monto, 0);
@@ -76,7 +90,9 @@ export default async function ResumenObra({ params, searchParams }: { params: Pr
   // ───── Arquitecto: vista simple — lo importante primero, el detalle en "Ver más" ─────
   if (esArq) {
     const orden = { critico: 0, aviso: 1, info: 2 } as const;
-    const atencion = [...r.alertas].sort((a, z) => orden[a.nivel] - orden[z.nivel]).slice(0, 4);
+    const partesProblema = await db.query.partesDiarios.findMany({ where: and(eq(schema.partesDiarios.obraId, id), gte(schema.partesDiarios.fecha, sumarDiasCorridos(hoyAR(), -3))), orderBy: desc(schema.partesDiarios.fecha) });
+    const alertasPartes = partesProblema.filter((p) => p.problema).map((p) => ({ nivel: "critico" as const, texto: `Parte del ${p.fecha.split("-").reverse().slice(0, 2).join("/")}: ${p.problema}`, link: `${b}/partes` }));
+    const atencion = [...alertasPartes, ...r.alertas].sort((a, z) => orden[a.nivel] - orden[z.nivel]).slice(0, 4);
     const semana = r.items.filter((i) => !i.esHito && i.avanceReal < 100 && i.inicio && i.inicio <= sumarHabiles(hoy, 5) && (i.fin ?? "") >= hoy).slice(0, 5);
     const desvio = r.avance.desvio;
     return (
@@ -223,15 +239,15 @@ export default async function ResumenObra({ params, searchParams }: { params: Pr
           </>
         ) : (
           <>
-            <Stat label="Presupuesto aprobado" value={r.presupuesto.faltanPrecios ? "En preparación" : ars(precioVenta + totalAdicionales)} hint={totalAdicionales ? `Incluye adicionales por ${ars(totalAdicionales)}` : undefined} />
-            <Stat label="Gastado a la fecha" value={ars(r.reales.total)} />
+            {veP && <Stat label="Presupuesto aprobado" value={r.presupuesto.faltanPrecios ? "En preparación" : ars(precioVenta + totalAdicionales)} hint={totalAdicionales ? `Incluye adicionales por ${ars(totalAdicionales)}` : undefined} />}
+            {veC && <Stat label="Gastado a la fecha" value={ars(r.reales.total)} />}
           </>
         )}
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <Section title="Curva de avance" actions={<Link href={`${b}/gantt`} className="text-xs text-brand-700 hover:underline">Ver Gantt</Link>}>
+          <Section title="Curva de avance" actions={(esArq || clienteVe(obra, "cronograma")) && <Link href={`${b}/gantt`} className="text-xs text-brand-700 hover:underline">Ver Gantt</Link>}>
             <div className="p-4">
               <CurvaAvance puntos={curva} hoy={hoy} real={r.avance.real} />
               <p className="mt-2 text-xs text-zinc-500">La línea punteada es el avance previsto acumulado (ponderado por {r.avance.ponderadoPor}) y el punto es el avance real informado.</p>
@@ -265,7 +281,7 @@ export default async function ResumenObra({ params, searchParams }: { params: Pr
             </Section>
           )}
 
-          {fotos.length > 0 && (
+          {fotos.length > 0 && (esArq || clienteVe(obra, "avances")) && (
             <Section title="Últimas fotos" actions={<Link href={`${b}/seguimiento`} className="text-xs text-brand-700 hover:underline">Ver avances</Link>}>
               <div className="grid grid-cols-3 gap-2 p-4">
                 {fotos.map((f) => (
@@ -292,10 +308,10 @@ export default async function ResumenObra({ params, searchParams }: { params: Pr
             <div>
               <h2 className="h2 mb-3">Para revisar</h2>
               <div className="space-y-2">
-                {adicionales.filter((a) => a.estado === "pendiente").map((a) => <Alerta key={a.id} nivel="aviso" texto={`Adicional para aprobar: ${a.titulo} (${ars(a.monto)})`} link={`${b}/presupuesto`} />)}
-                {r.reales.compras.filter((c) => c.aprobacionCliente === "pendiente").map((c) => <Alerta key={c.id} nivel="aviso" texto={`Compra para aprobar: ${c.descripcion} (${ars(c.total)})`} link={`${b}/compras`} />)}
+                {veP && adicionales.filter((a) => a.estado === "pendiente").map((a) => <Alerta key={a.id} nivel="aviso" texto={`Adicional para aprobar: ${a.titulo} (${ars(a.monto)})`} link={`${b}/presupuesto`} />)}
+                {veC && r.reales.compras.filter((c) => c.aprobacionCliente === "pendiente").map((c) => <Alerta key={c.id} nivel="aviso" texto={`Compra para aprobar: ${c.descripcion} (${ars(c.total)})`} link={`${b}/compras`} />)}
                 {r.atrasados.length > 0 && <Alerta nivel="info" texto={`Hay ${r.atrasados.length} tareas demoradas respecto del cronograma.`} link={`${b}/gantt`} />}
-                {!adicionales.some((a) => a.estado === "pendiente") && !r.reales.compras.some((c) => c.aprobacionCliente === "pendiente") && <p className="muted">No hay nada pendiente de tu aprobación.</p>}
+                {!(veP && adicionales.some((a) => a.estado === "pendiente")) && !(veC && r.reales.compras.some((c) => c.aprobacionCliente === "pendiente")) && <p className="muted">No hay nada pendiente de tu aprobación.</p>}
               </div>
             </div>
           )}

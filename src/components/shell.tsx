@@ -4,13 +4,13 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
   LayoutDashboard, Building2, PlusCircle, Truck, Settings, Bell, Menu, X, ListTree, Calculator, Receipt, Wallet, GanttChart,
-  Package, ClipboardList, ShoppingCart, FileText, MessagesSquare, BarChart3, Sparkles, Users, Info, Activity, ArrowLeft, Scale, LogOut, Tags, MessageCircle, History,
+  Package, ClipboardList, ShoppingCart, FileText, MessagesSquare, BarChart3, Sparkles, Users, Info, Activity, ArrowLeft, Scale, LogOut, Tags, MessageCircle, History, NotebookPen,
 } from "lucide-react";
 
 const ICONOS = {
   dashboard: LayoutDashboard, obras: Building2, nueva: PlusCircle, proveedores: Truck, config: Settings, rubros: ListTree, computo: Package,
   precios: Calculator, presupuesto: Receipt, costos: Wallet, gantt: GanttChart, solicitudes: ClipboardList, compras: ShoppingCart, docs: FileText,
-  mensajes: MessagesSquare, reportes: BarChart3, ia: Sparkles, equipo: Users, datos: Info, seguimiento: Activity, atras: ArrowLeft, cotizaciones: Scale, insumos: Tags, whatsapp: MessageCircle, historial: History,
+  mensajes: MessagesSquare, reportes: BarChart3, ia: Sparkles, equipo: Users, datos: Info, seguimiento: Activity, atras: ArrowLeft, cotizaciones: Scale, insumos: Tags, whatsapp: MessageCircle, historial: History, parte: NotebookPen,
 } as const;
 export type IconName = keyof typeof ICONOS;
 export type NavTab = { href: string; label: string; badge?: number; exact?: boolean };

@@ -24,10 +24,26 @@ async function usuario(nombre: string, email: string, telefono?: string) {
   return u;
 }
 
+/** Agregados posteriores a la demo (idempotente: corre también sobre bases ya cargadas). */
+async function completarDemo() {
+  const obrero = await db.query.users.findFirst({ where: eq(schema.users.email, "obrero@demo.com") });
+  const obra = await db.query.obras.findFirst({ where: eq(schema.obras.codigo, "OB-2026-0001") });
+  if (!obrero || !obra) return;
+  if (!obrero.dni) await db.update(schema.users).set({ dni: "30000000", pinHash: await bcrypt.hash("123456", 10) }).where(eq(schema.users.id, obrero.id));
+  const hay = await db.query.partesDiarios.findFirst({ where: eq(schema.partesDiarios.obraId, obra.id) });
+  if (hay) return;
+  const f = (d: number) => sumarHabiles(hoyISO(), -d);
+  await db.insert(schema.partesDiarios).values([
+    { obraId: obra.id, autorId: obrero.id, fecha: f(1), personas: 4, horas: 8, clima: "bueno", trabajos: "Mampostería exterior lado norte. Llegó el hierro para la losa." },
+    { obraId: obra.id, autorId: obrero.id, fecha: f(2), personas: 2, horas: 4, clima: "lluvia", trabajos: "Se trabajó medio día por lluvia. Ordenamos el obrador.", problema: "Se suspendió la tarde por lluvia" },
+    { obraId: obra.id, autorId: obrero.id, fecha: f(3), personas: 4, horas: 8, clima: "nublado", trabajos: "Columnas del frente y encadenado." },
+  ]);
+}
+
 async function main() {
   if (process.env.SEED_DEMO === "0") { console.log("SEED_DEMO=0: no se cargan datos de demostración."); return; }
   const ya = await db.query.users.findFirst({ where: eq(schema.users.email, "arquitecta@demo.com") });
-  if (ya) { console.log("La base ya tiene datos de demo."); return; }
+  if (ya) { await completarDemo(); console.log("La base ya tiene datos de demo."); return; }
 
   const ana = await usuario("Ana Rossi", "arquitecta@demo.com", "5491150000001");
   const cliente = await usuario("Martín Pérez", "cliente@demo.com", "5491150000002");
@@ -99,6 +115,7 @@ async function main() {
     tipo: "ampliacion", sistema: "steel_frame", supCubierta: 45, supSemicubierta: 15, niveles: 1, fechaInicio: sumarHabiles(hoyISO(), 10), parametros: {},
   }).returning();
   await generarDesdePlantilla(obra2);
+  await completarDemo();
   console.log("Demo creada. Usuarios: arquitecta@demo.com / cliente@demo.com / obrero@demo.com — contraseña demo1234");
 }
 

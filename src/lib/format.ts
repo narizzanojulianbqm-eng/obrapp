@@ -16,3 +16,6 @@ export function parseMonto(v: unknown): number {
   const n = Number(t);
   return isNaN(n) ? 0 : n;
 }
+
+/** Fecha de hoy en Argentina (YYYY-MM-DD), sin importar la zona horaria del servidor. */
+export const hoyAR = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" });

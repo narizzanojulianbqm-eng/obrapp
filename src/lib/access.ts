@@ -1,6 +1,8 @@
 import "server-only";
 import { and, eq, inArray, or } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { clienteVe, seccionDeRuta } from "./portal";
 import { db, schema } from "./db";
 import { requireUser } from "./auth";
 import type { Rol } from "./db/schema";
@@ -30,6 +32,12 @@ export async function requireObra(obraId: string, roles?: Rol[]): Promise<Acceso
   const r = await rolEnObra(user.id, user.email, obraId);
   if (!r) notFound();
   if (roles && !roles.includes(r.rol)) redirect(`/obras/${obraId}`);
+  if (r.rol === "cliente") {
+    // Portal del cliente: el arquitecto puede ocultar secciones
+    const ruta = (await headers()).get("x-ruta") ?? "";
+    const sec = ruta.startsWith(`/obras/${obraId}/`) ? seccionDeRuta(ruta) : null;
+    if (sec && !clienteVe(r.obra, sec)) redirect(`/obras/${obraId}`);
+  }
   return { user, ...r };
 }
 

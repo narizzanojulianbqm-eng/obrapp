@@ -6,6 +6,7 @@ import { requireObra } from "@/lib/access";
 import { noLeidas } from "@/lib/queries";
 import { db, schema } from "@/lib/db";
 import { ROL_LABEL } from "@/lib/format";
+import { clienteVe } from "@/lib/portal";
 
 export default async function ObraLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -25,7 +26,7 @@ export default async function ObraLayout({ children, params }: { children: React
       {
         links: [
           { href: b, label: "Inicio", icon: "dashboard", exact: true },
-          { href: `${b}/gantt`, label: "Planificación", icon: "gantt", tabs: [{ href: `${b}/gantt`, label: "Cronograma" }, { href: `${b}/rubros`, label: "Tareas" }, { href: `${b}/seguimiento`, label: "Avance" }], match: [`${b}/tarea`] },
+          { href: `${b}/gantt`, label: "Planificación", icon: "gantt", tabs: [{ href: `${b}/gantt`, label: "Cronograma" }, { href: `${b}/rubros`, label: "Tareas" }, { href: `${b}/seguimiento`, label: "Avance" }, { href: `${b}/partes`, label: "Partes diarios" }], match: [`${b}/tarea`] },
           { href: `${b}/presupuesto`, label: "Presupuesto", icon: "presupuesto", tabs: [{ href: `${b}/presupuesto`, label: "Presupuesto" }, { href: `${b}/precios`, label: "Precios" }, { href: `${b}/computo`, label: "Materiales" }, { href: `${b}/costos`, label: "Costos y ganancia" }] },
           { href: `${b}/solicitudes`, label: "Compras", icon: "compras", badge: Number(sol), tabs: [{ href: `${b}/solicitudes`, label: "Pedidos de obra", badge: Number(sol) }, { href: `${b}/compras`, label: "Compras" }, { href: `${b}/cotizaciones`, label: "Cotizaciones" }] },
           { href: `${b}/mensajes`, label: "Comunicación", icon: "mensajes", tabs: [{ href: `${b}/mensajes`, label: "Mensajes" }, { href: `${b}/documentos`, label: "Documentos" }, { href: `${b}/asistente`, label: "Asistente" }] },
@@ -34,14 +35,16 @@ export default async function ObraLayout({ children, params }: { children: React
       },
     ];
   } else if (rol === "cliente") {
-    sections = [
-      { links: [{ href: b, label: "Estado de la obra", icon: "dashboard", exact: true }, { href: `${b}/gantt`, label: "Cronograma", icon: "gantt" }, { href: `${b}/seguimiento`, label: "Avances y fotos", icon: "seguimiento" }] },
-      { title: "Dinero", links: [{ href: `${b}/presupuesto`, label: "Presupuesto", icon: "presupuesto", badge: Number(adic) }, { href: `${b}/compras`, label: "Compras y gastos", icon: "compras", badge: Number(comp) }] },
-      { title: "Comunicación", links: [{ href: `${b}/mensajes`, label: "Mensajes", icon: "mensajes" }, { href: `${b}/documentos`, label: "Documentación", icon: "docs" }, { href: `${b}/asistente`, label: "Asistente IA", icon: "ia" }, { href: `${b}/reporte`, label: "Reporte", icon: "reportes" }] },
-    ];
+    const ve = (c: Parameters<typeof clienteVe>[1]) => clienteVe(obra, c);
+    const quitarVacias = (xs: NavSection[]) => xs.filter((x) => x.links.length);
+    sections = quitarVacias([
+      { links: [{ href: b, label: "Estado de la obra", icon: "dashboard" as const, exact: true }, ...(ve("cronograma") ? [{ href: `${b}/gantt`, label: "Cronograma", icon: "gantt" as const }] : []), ...(ve("avances") ? [{ href: `${b}/seguimiento`, label: "Avances y fotos", icon: "seguimiento" as const }] : [])] },
+      { title: "Dinero", links: [...(ve("presupuesto") ? [{ href: `${b}/presupuesto`, label: "Presupuesto", icon: "presupuesto" as const, badge: Number(adic) }] : []), ...(ve("compras") ? [{ href: `${b}/compras`, label: "Compras y gastos", icon: "compras" as const, badge: Number(comp) }] : [])] },
+      { title: "Comunicación", links: [...(ve("mensajes") ? [{ href: `${b}/mensajes`, label: "Mensajes", icon: "mensajes" as const }] : []), ...(ve("documentos") ? [{ href: `${b}/documentos`, label: "Documentación", icon: "docs" as const }] : []), ...(ve("asistente") ? [{ href: `${b}/asistente`, label: "Asistente IA", icon: "ia" as const }] : []), { href: `${b}/reporte`, label: "Reporte", icon: "reportes" as const }] },
+    ]);
   } else {
     sections = [
-      { links: [{ href: b, label: "Inicio", icon: "dashboard", exact: true }, { href: `${b}/seguimiento`, label: "Mis tareas", icon: "seguimiento" }, { href: `${b}/gantt`, label: "Cronograma", icon: "gantt" }] },
+      { links: [{ href: b, label: "Inicio", icon: "dashboard", exact: true }, { href: `${b}/partes`, label: "Parte del día", icon: "parte" }, { href: `${b}/seguimiento`, label: "Mis tareas", icon: "seguimiento" }, { href: `${b}/gantt`, label: "Cronograma", icon: "gantt" }] },
       { title: "Materiales", links: [{ href: `${b}/computo`, label: "Materiales de la obra", icon: "computo" }, { href: `${b}/solicitudes`, label: "Pedir materiales", icon: "solicitudes" }] },
       { title: "Comunicación", links: [{ href: `${b}/mensajes`, label: "Mensajes", icon: "mensajes" }, { href: `${b}/documentos`, label: "Planos y documentos", icon: "docs" }, { href: `${b}/asistente`, label: "Asistente IA", icon: "ia" }] },
     ];

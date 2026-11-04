@@ -96,3 +96,22 @@ export async function restablecerContrasena(_: FormState, fd: FormData): Promise
   await createSession(u.id);
   redirect("/dashboard");
 }
+
+// ───────── Acceso del equipo de obra: DNI + PIN (sin email ni contraseña) ─────────
+export async function ingresarConDni(_: FormState, fd: FormData): Promise<FormState> {
+  const dni = String(fd.get("dni") ?? "").replace(/\D/g, "");
+  const pin = String(fd.get("pin") ?? "").replace(/\D/g, "");
+  if (dni.length < 7 || dni.length > 9) return { error: "Ingresá tu DNI sin puntos" };
+  if (pin.length !== 6) return { error: "El PIN tiene 6 números" };
+  const clave = `dni:${dni}`;
+  const bloq = await minutosBloqueado(clave);
+  if (bloq) return { error: `Demasiados intentos. Probá de nuevo en ${bloq} minuto(s) o pedile un PIN nuevo al arquitecto.` };
+  const u = await db.query.users.findFirst({ where: eq(schema.users.dni, dni) });
+  if (!u?.pinHash || !(await bcrypt.compare(pin, u.pinHash))) {
+    await registrarFallo(clave);
+    return { error: "DNI o PIN incorrectos" };
+  }
+  await limpiarFallos(clave);
+  await createSession(u.id);
+  redirect("/dashboard");
+}

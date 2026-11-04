@@ -1,4 +1,7 @@
 "use server";
+import { hoyAR } from "@/lib/format";
+import { SECCIONES_PORTAL } from "@/lib/portal";
+import bcrypt from "bcryptjs";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -576,4 +579,96 @@ export async function importarPlanilla(obraId: string, filas: { rubro: string; n
   await auditar(obraId, user.id, "planilla.importar", `${validas.length} ítems (${modo})`);
   revalidatePath(`/obras/${obraId}`, "layout");
   return validas.length;
+}
+
+// ───────── Equipo de obra con DNI + PIN (sin email) ─────────
+const pinNuevo = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+const limpiarDni = (v: FormDataEntryValue | null) => String(v ?? "").replace(/\D/g, "");
+
+async function fijarDniPin(userId: string, dni: string, pinIngresado: string): Promise<{ error?: string; pin?: string }> {
+  if (dni.length < 7 || dni.length > 9) return { error: "DNI inválido (sin puntos, 7 u 8 números)" };
+  const pin = pinIngresado.replace(/\D/g, "") || pinNuevo();
+  if (pin.length !== 6) return { error: "El PIN tiene que tener 6 números" };
+  const otro = await db.query.users.findFirst({ where: eq(schema.users.dni, dni) });
+  if (otro && otro.id !== userId) return { error: "Ese DNI ya está asignado a otra persona" };
+  await db.update(schema.users).set({ dni, pinHash: await bcrypt.hash(pin, 10) }).where(eq(schema.users.id, userId));
+  return { pin };
+}
+
+export async function configurarAccesoObrero(miembroId: string, _: FormState, fd: FormData): Promise<FormState> {
+  const m = await db.query.miembros.findFirst({ where: eq(schema.miembros.id, miembroId) });
+  if (!m) return { error: "Persona inexistente" };
+  const { user } = await assertObra(m.obraId, ["arquitecto"]);
+  if (m.rol !== "obrero") return { error: "El acceso con DNI es para el equipo de obra" };
+  let uid = m.userId;
+  if (!uid) {
+    const ex = await db.query.users.findFirst({ where: eq(schema.users.email, m.email) });
+    uid = ex?.id ?? (await db.insert(schema.users).values({ nombre: m.nombre ?? m.email, email: m.email, passwordHash: await bcrypt.hash(crypto.randomUUID(), 10) }).returning())[0].id;
+    await db.update(schema.miembros).set({ userId: uid }).where(eq(schema.miembros.id, m.id));
+  }
+  const r = await fijarDniPin(uid, limpiarDni(fd.get("dni")), String(fd.get("pin") ?? ""));
+  if (r.error) return { error: r.error };
+  await auditar(m.obraId, user.id, "equipo.acceso_dni", m.nombre ?? m.email);
+  revalidatePath(`/obras/${m.obraId}/equipo`);
+  return { ok: `Listo. Pasale estos datos: entra en ${process.env.APP_URL ?? ""}/acceso-obra con DNI ${limpiarDni(fd.get("dni"))} y PIN ${r.pin}.` };
+}
+
+export async function sumarObreroConDni(obraId: string, _: FormState, fd: FormData): Promise<FormState> {
+  const { user, obra } = await assertObra(obraId, ["arquitecto"]);
+  const nombre = String(fd.get("nombre") ?? "").trim();
+  const dni = limpiarDni(fd.get("dni"));
+  if (nombre.length < 2) return { error: "Ingresá el nombre" };
+  if (dni.length < 7 || dni.length > 9) return { error: "DNI inválido (sin puntos)" };
+  const ms = await db.query.miembros.findMany({ where: eq(schema.miembros.obraId, obraId) });
+  const owner = (await db.query.users.findFirst({ where: eq(schema.users.id, obra.ownerId) }))!;
+  if (ms.length >= PLANES[owner.plan].miembrosPorObra) return { error: "Alcanzaste el límite de personas de tu plan." };
+  let u = await db.query.users.findFirst({ where: eq(schema.users.dni, dni) });
+  if (!u) [u] = await db.insert(schema.users).values({ nombre, email: `dni-${dni}@obra.obrapp.local`, passwordHash: await bcrypt.hash(crypto.randomUUID(), 10) }).returning();
+  if (ms.some((m) => m.userId === u!.id)) return { error: "Esa persona ya está en la obra" };
+  const r = await fijarDniPin(u.id, dni, String(fd.get("pin") ?? ""));
+  if (r.error) return { error: r.error };
+  await db.insert(schema.miembros).values({ obraId, userId: u.id, email: u.email, nombre, rol: "obrero", oficio: String(fd.get("oficio") ?? "").trim() || null });
+  await auditar(obraId, user.id, "equipo.sumar_dni", nombre);
+  revalidatePath(`/obras/${obraId}/equipo`);
+  return { ok: `${nombre} ya puede entrar en ${process.env.APP_URL ?? ""}/acceso-obra con DNI ${dni} y PIN ${r.pin}. Anotalo: por seguridad no se vuelve a mostrar.` };
+}
+
+// ───────── Parte diario ─────────
+const CLIMAS = ["bueno", "nublado", "lluvia", "viento", "calor", "frio"] as const;
+export async function guardarParteDiario(obraId: string, _: FormState, fd: FormData): Promise<FormState> {
+  const { user } = await assertObra(obraId, ["arquitecto", "obrero"]);
+  const hoy = hoyAR();
+  const fecha = /^\d{4}-\d{2}-\d{2}$/.test(String(fd.get("fecha") ?? "")) ? String(fd.get("fecha")) : hoy;
+  if (fecha > hoy) return { error: "La fecha no puede ser futura" };
+  const personas = Math.max(0, Math.min(500, Math.round(Number(fd.get("personas") ?? 0) || 0)));
+  const horas = Math.max(0, Math.min(24, Number(String(fd.get("horas") ?? "8").replace(",", ".")) || 0));
+  const climaIn = String(fd.get("clima") ?? "bueno");
+  const clima = (CLIMAS as readonly string[]).includes(climaIn) ? (climaIn as (typeof CLIMAS)[number]) : "bueno";
+  const trabajos = String(fd.get("trabajos") ?? "").trim().slice(0, 2000) || null;
+  const problema = String(fd.get("problema") ?? "").trim().slice(0, 1000) || null;
+  if (!trabajos && !problema && personas === 0) return { error: "Contá al menos qué se hizo o cuántos trabajaron" };
+  const fotos = await guardarArchivos(obraId, user.id, fd.getAll("fotos") as File[], { categoria: "foto" });
+  await db.insert(schema.partesDiarios).values({ obraId, autorId: user.id, fecha, personas, horas, clima, trabajos, problema, fotos });
+  await notificar(
+    obraId,
+    ["arquitecto"],
+    problema ? `⚠ Parte diario con problema (${user.nombre}): ${problema}` : `${user.nombre} cargó el parte diario del ${fecha.split("-").reverse().join("/")}`,
+    `/obras/${obraId}/partes`,
+    user.id,
+    { whatsapp: !!problema },
+  );
+  await auditar(obraId, user.id, "parte.crear", fecha);
+  revalidatePath(`/obras/${obraId}`, "layout");
+  return { ok: problema ? "Parte guardado. El arquitecto ya recibió el aviso del problema." : "Parte del día guardado. ¡Gracias!" };
+}
+
+// ───────── Portal del cliente ─────────
+export async function guardarPortalCliente(obraId: string, _: FormState, fd: FormData): Promise<FormState> {
+  const { user } = await assertObra(obraId, ["arquitecto"]);
+  const portal = Object.fromEntries(SECCIONES_PORTAL.map((s) => [s.clave, fd.get(s.clave) === "on"]));
+  await db.update(schema.obras).set({ portalCliente: portal }).where(eq(schema.obras.id, obraId));
+  const ocultas = SECCIONES_PORTAL.filter((s) => !portal[s.clave]).map((s) => s.label);
+  await auditar(obraId, user.id, "portal.cliente", ocultas.length ? `Oculto: ${ocultas.join(", ")}` : "Todo visible");
+  revalidatePath(`/obras/${obraId}`, "layout");
+  return { ok: ocultas.length ? `Guardado. El cliente no ve: ${ocultas.join(", ")}.` : "Guardado. El cliente ve todas las secciones." };
 }

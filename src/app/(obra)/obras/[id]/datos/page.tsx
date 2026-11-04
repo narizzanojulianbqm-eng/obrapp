@@ -3,7 +3,8 @@ import { Field, PageHeader } from "@/components/ui";
 import { ObraForm } from "@/components/forms/obra-form";
 import { ActionForm } from "@/components/forms/form-state";
 import { ConfirmAction } from "@/components/client";
-import { actualizarObra, actualizarParametros, eliminarObra, regenerarDesdePlantilla } from "@/app/actions/obra";
+import { actualizarObra, actualizarParametros, eliminarObra, guardarPortalCliente, regenerarDesdePlantilla } from "@/app/actions/obra";
+import { clienteVe, SECCIONES_PORTAL } from "@/lib/portal";
 import { magnitudes, PARAMETROS_INFO, parametrosPorDefecto } from "@/lib/engine/plantillas";
 import { num } from "@/lib/format";
 
@@ -37,6 +38,21 @@ export default async function Datos({ params }: { params: Promise<{ id: string }
             <div>Muros interiores<br /><b className="text-sm text-zinc-900">{num(m.muroInt, 1)} m²</b></div>
             <div>Cimientos<br /><b className="text-sm text-zinc-900">{num(m.cimientos, 1)} ml</b></div>
             <div>Planta tipo<br /><b className="text-sm text-zinc-900">{num(m.planta, 1)} m²</b></div>
+          </div>
+        </ActionForm>
+      </section>
+
+      <section id="portal" className="card card-pad">
+        <div className="h2">Qué ve el cliente</div>
+        <p className="muted mb-4 mt-1">Elegí qué secciones aparecen en el portal de tu cliente. Nunca ve costos internos, honorarios ni ganancia, aunque marques todo.</p>
+        <ActionForm action={guardarPortalCliente.bind(null, id)} submitLabel="Guardar">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {SECCIONES_PORTAL.map((s) => (
+              <label key={s.clave} className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-200 px-3 py-2.5 hover:bg-zinc-50">
+                <input type="checkbox" name={s.clave} defaultChecked={clienteVe(obra, s.clave)} className="h-4 w-4 accent-brand-700" />
+                <span>{s.label}</span>
+              </label>
+            ))}
           </div>
         </ActionForm>
       </section>

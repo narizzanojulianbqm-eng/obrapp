@@ -3,7 +3,9 @@ import { requireObra } from "@/lib/access";
 import { resumenObra } from "@/lib/queries";
 import { db, schema } from "@/lib/db";
 import { PageHeader, Section, Stat } from "@/components/ui";
-import { ars, pct } from "@/lib/format";
+import { ars, num, pct } from "@/lib/format";
+import { proyectarObra } from "@/lib/engine/proyeccion";
+import { computoMateriales } from "@/lib/engine/calculos";
 
 export default async function Costos({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ rubro?: string; proveedor?: string; desde?: string; hasta?: string }> }) {
   const { id } = await params;
@@ -38,6 +40,22 @@ export default async function Costos({ params, searchParams }: { params: Promise
   const porProv = new Map<string, number>();
   for (const c of r.reales.compras) porProv.set(c.proveedorId ?? "—", (porProv.get(c.proveedorId ?? "—") ?? 0) + c.total);
 
+  // ── Cómo termina la obra ──
+  const proy = proyectarObra(
+    p.rubros.map((x) => ({ id: x.rubro.id, nombre: `${x.rubro.codigo} ${x.rubro.nombre}`, presupuestado: x.subtotal, items: x.items.filter((i) => !i.item.esHito).map((i) => ({ peso: i.parcial > 0 ? i.parcial : Math.max(1, i.item.duracion), avance: i.item.avanceReal })) })),
+    r.reales.porRubro,
+  );
+  const vigentes = r.reales.compras.filter((c) => c.aprobacionCliente !== "rechazada");
+  const sinRubro = vigentes.filter((c) => !c.rubroId);
+  const totalSinRubro = sinRubro.reduce((s, c) => s + c.total, 0);
+  const estimadoTotal = proy.estimado + totalSinRubro;
+  const desvioTotal = estimadoTotal - proy.presupuestado;
+  const computo = computoMateriales(r.items, r.recursos, r.insumos);
+  const comprado = new Map<string, number>();
+  for (const c of vigentes) if (c.insumoId) comprado.set(c.insumoId, (comprado.get(c.insumoId) ?? 0) + c.cantidad);
+  const excesos = computo.filter((m) => (comprado.get(m.insumo.id) ?? 0) > m.cantidad * 1.1).map((m) => ({ nombre: m.insumo.nombre, unidad: m.insumo.unidad, computado: m.cantidad, comprado: comprado.get(m.insumo.id) ?? 0 }));
+  const desviados = proy.filas.filter((f) => f.presupuestado > 0 && f.desvio > f.presupuestado * 0.05).sort((a, z) => z.desvio - a.desvio);
+
   return (
     <>
       <PageHeader title="Costos y beneficios" subtitle="Información privada del arquitecto. Los clientes y obreros no tienen acceso a esta sección." />
@@ -51,6 +69,67 @@ export default async function Costos({ params, searchParams }: { params: Promise
         <Stat label="Margen proyectado" value={ars(p.total + aprobados - Math.max(p.costoObra, r.reales.total) - p.iva)} hint="Precio − costo (mayor entre previsto y real) − IVA" />
         <Stat label="Avance físico" value={pct(r.avance.real, 0)} hint={`Ejecutado económico: ${pct(p.costoObra ? (r.reales.total / p.costoObra) * 100 : 0, 0)}`} />
       </div>
+
+      <section className="card mt-6 p-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Cómo termina la obra</h2>
+            <p className="muted mt-0.5">Si cada rubro sigue gastando como hasta ahora, el costo directo cerraría así.</p>
+          </div>
+          <div className="text-right">
+            <div className="text-sm text-zinc-500">Estimado al cierre</div>
+            <div className="text-2xl font-semibold tabular-nums">{ars(estimadoTotal)}</div>
+            <div className={`text-sm font-medium ${desvioTotal > proy.presupuestado * 0.03 ? "text-red-700" : desvioTotal < -proy.presupuestado * 0.03 ? "text-brand-700" : "text-zinc-500"}`}>
+              {proy.presupuestado > 0 ? `${desvioTotal > 0 ? "+" : ""}${ars(desvioTotal)} (${desvioTotal > 0 ? "+" : ""}${pct((desvioTotal / proy.presupuestado) * 100, 1)}) vs. presupuesto` : "Cargá precios para comparar"}
+            </div>
+          </div>
+        </div>
+        {(desviados.length > 0 || totalSinRubro > 0 || excesos.length > 0) ? (
+          <ul className="mt-4 space-y-2 text-[15px]">
+            {desviados.slice(0, 4).map((f) => (
+              <li key={f.id} className="flex items-start gap-3 rounded-lg bg-red-50 px-3 py-2.5 text-red-900">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />
+                <span><b>{f.nombre}</b>: va {pct(f.avance, 0)} hecho y lleva gastado {ars(f.gastado)}. Terminaría en {ars(f.estimado)} (<b>+{ars(f.desvio)}</b>).</span>
+              </li>
+            ))}
+            {totalSinRubro > 0 && (
+              <li className="flex items-start gap-3 rounded-lg bg-amber-50 px-3 py-2.5 text-amber-900">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+                <span><b>{ars(totalSinRubro)}</b> en {sinRubro.length} compra{sinRubro.length > 1 ? "s" : ""} sin rubro: son gastos fuera del presupuesto. Asignales un rubro en Compras o cobralos como adicional.</span>
+              </li>
+            )}
+            {excesos.slice(0, 4).map((e) => (
+              <li key={e.nombre} className="flex items-start gap-3 rounded-lg bg-amber-50 px-3 py-2.5 text-amber-900">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+                <span><b>{e.nombre}</b>: se compraron {num(e.comprado)} {e.unidad} y el cómputo pide {num(e.computado)} {e.unidad} ({pct(((e.comprado - e.computado) / e.computado) * 100, 0)} de más).</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 text-[15px] text-brand-700">✓ Ningún rubro viene excedido y no hay gastos fuera del presupuesto.</p>
+        )}
+        <details className="mt-4">
+          <summary className="cursor-pointer text-sm font-medium text-brand-700">Ver proyección por rubro</summary>
+          <div className="mt-2 overflow-x-auto">
+            <table className="tbl">
+              <thead><tr><th>Rubro</th><th className="num">Avance</th><th className="num">Presupuestado</th><th className="num">Gastado</th><th className="num">Estimado al cierre</th><th className="num">Desvío</th></tr></thead>
+              <tbody>
+                {proy.filas.filter((f) => f.presupuestado > 0 || f.gastado > 0).map((f) => (
+                  <tr key={f.id}>
+                    <td>{f.nombre}</td>
+                    <td className="num">{pct(f.avance, 0)}</td>
+                    <td className="num">{ars(f.presupuestado)}</td>
+                    <td className="num">{ars(f.gastado)}</td>
+                    <td className="num">{ars(f.estimado)}{f.base === "presupuesto" && <span className="ml-1 text-xs text-zinc-400" title="Todavía no hay avance suficiente para proyectar">*</span>}</td>
+                    <td className={`num ${f.desvio > f.presupuestado * 0.05 ? "text-red-700" : f.desvio < 0 ? "text-brand-700" : "text-zinc-500"}`}>{f.desvio ? `${f.desvio > 0 ? "+" : ""}${ars(f.desvio)}` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-2 text-xs text-zinc-500">* Rubros con menos del 15 % de avance: se toma lo presupuestado. El resto se proyecta con el rendimiento real (gastado ÷ valor del trabajo hecho).</p>
+          </div>
+        </details>
+      </section>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Section title="Desvíos por rubro (costo directo vs ejecutado)">
