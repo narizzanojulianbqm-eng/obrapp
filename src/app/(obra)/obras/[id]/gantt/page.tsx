@@ -22,10 +22,7 @@ export default async function GanttPage({ params }: { params: Promise<{ id: stri
   const fin = finDeObra(items);
   return (
     <>
-      <PageHeader
-        title={rol === "arquitecto" ? "Diagrama de Gantt" : "Cronograma"}
-        subtitle={`Del ${fechaLarga(obra.fechaInicio)} al ${fechaLarga(fin)}${fin ? ` · ${diasCorridos(obra.fechaInicio, fin)} días corridos` : ""} · días hábiles de lunes a viernes. Generado a partir de los rubros, los rendimientos y las dependencias.`}
-      />
+      <PageHeader title="Cronograma" subtitle={rol === "arquitecto" ? "Se arma solo con las tareas de la obra. Tocá un rubro para ver sus tareas." : "Fechas previstas y avance de cada etapa de la obra."} />
       <Gantt items={data} hoy={hoy} editable={rol === "arquitecto"} />
     </>
   );
