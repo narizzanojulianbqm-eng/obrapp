@@ -10,6 +10,12 @@ Obrapp es una aplicación web (SaaS) para arquitectos, clientes y obreros, pensa
 
 Todo queda conectado: si cambia un dato, se recalculan los módulos que dependen de él. Clientes y obreros trabajan dentro del mismo sistema, desde la web o **por WhatsApp**.
 
+## Entorno publicado
+
+- **URL pública:** https://obrapp-three.vercel.app (Vercel + base Turso)
+- **Entorno de prueba:** en el login hay botones de acceso para los tres perfiles demo, y los datos son ficticios.
+- **Actualizaciones:** cada `git push` a `main` vuelve a publicar la app sola (ver `docs/despliegue.md`).
+
 ## Puesta en marcha (local)
 
 Requiere Node 20 o superior.
