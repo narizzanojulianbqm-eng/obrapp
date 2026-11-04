@@ -55,4 +55,4 @@ Cada una se activa agregando sus variables en Vercel y volviendo a desplegar. Mi
 - **WhatsApp:** `WHATSAPP_*` (ver `docs/whatsapp.md`).
 - **IA:** `ANTHROPIC_API_KEY`. Opcional: `OPENAI_API_KEY` para transcribir audios.
 - **Email:** `RESEND_API_KEY` y `EMAIL_FROM`.
-- **Cobro de suscripciones:** `MERCADOPAGO_ACCESS_TOKEN`.
+- **Cobro de suscripciones:** `MP_ACCESS_TOKEN` (y `MP_WEBHOOK_SECRET`).
