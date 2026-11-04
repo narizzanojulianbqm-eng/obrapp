@@ -73,6 +73,132 @@ export default async function ResumenObra({ params, searchParams }: { params: Pr
     : [];
   const usuariosAct = actividad.length ? await db.query.users.findMany({ where: inArray(schema.users.id, actividad.map((a) => a.userId!).filter(Boolean)) }) : [];
 
+  // ───── Arquitecto: vista simple — lo importante primero, el detalle en "Ver más" ─────
+  if (esArq) {
+    const orden = { critico: 0, aviso: 1, info: 2 } as const;
+    const atencion = [...r.alertas].sort((a, z) => orden[a.nivel] - orden[z.nivel]).slice(0, 4);
+    const semana = r.items.filter((i) => !i.esHito && i.avanceReal < 100 && i.inicio && i.inicio <= sumarHabiles(hoy, 5) && (i.fin ?? "") >= hoy).slice(0, 5);
+    const desvio = r.avance.desvio;
+    return (
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">{obra.nombre}</h1>
+            <p className="mt-1 text-[15px] text-zinc-500">{[obra.localidad, `${num(obra.supCubierta, 0)} m²`, obra.clienteNombre].filter(Boolean).join(" · ")}</p>
+          </div>
+          <Link href={`${b}/datos`} className="btn-secondary px-4 py-2.5 text-[15px]">Editar obra</Link>
+        </div>
+
+        {nueva && (
+          <div className="mb-6 rounded-2xl bg-brand-50 p-5 text-[15px] text-brand-900">
+            <div className="text-base font-semibold">¡Obra creada! Ya se armaron las tareas, cantidades y el cronograma.</div>
+            <p className="mt-1">Próximo paso: cargá los precios para completar el presupuesto.</p>
+            <Link href={`${b}/precios`} className="btn-primary mt-3 px-4 py-2.5 text-[15px]">Cargar precios</Link>
+          </div>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="card p-5">
+            <div className="text-sm text-zinc-500">Avance</div>
+            <div className="mt-1 text-3xl font-semibold tabular-nums">{pct(r.avance.real, 0)}</div>
+            <div className="mt-3"><Progress value={r.avance.real} previsto={r.avance.previsto} /></div>
+            <div className={`mt-2 text-sm ${desvio < -10 ? "text-red-700" : desvio < -3 ? "text-amber-700" : "text-brand-700"}`}>
+              {desvio < -3 ? `Atrasada ${Math.abs(desvio).toFixed(0)} puntos` : "En tiempo"}
+            </div>
+          </div>
+          <div className="card p-5">
+            <div className="text-sm text-zinc-500">Termina</div>
+            <div className="mt-1 text-3xl font-semibold">{fechaLarga(fin)}</div>
+            <Link href={`${b}/gantt`} className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline">Ver cronograma →</Link>
+          </div>
+          <div className="card p-5">
+            <div className="text-sm text-zinc-500">Presupuesto</div>
+            {r.presupuesto.faltanPrecios ? (
+              <>
+                <div className="mt-1 text-xl font-semibold text-amber-700">Faltan {r.presupuesto.faltanPrecios} precios</div>
+                <Link href={`${b}/precios`} className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline">Cargar precios →</Link>
+              </>
+            ) : (
+              <>
+                <div className="mt-1 text-3xl font-semibold tabular-nums">{ars(precioVenta + totalAdicionales)}</div>
+                <div className="mt-3 text-sm text-zinc-500">Gastado {ars(r.reales.total)}</div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <section className="card p-5">
+            <h2 className="text-lg font-semibold">Necesita tu atención</h2>
+            <div className="mt-3 space-y-2">
+              {atencion.length === 0 && <p className="text-[15px] text-brand-700">✓ Todo en orden.</p>}
+              {atencion.map((a, i) => (
+                <Link key={i} href={a.link ?? b} className={`flex items-start gap-3 rounded-xl px-3 py-3 text-[15px] hover:bg-zinc-50 ${a.nivel === "critico" ? "text-red-800" : a.nivel === "aviso" ? "text-amber-900" : "text-zinc-700"}`}>
+                  <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${a.nivel === "critico" ? "bg-red-500" : a.nivel === "aviso" ? "bg-amber-500" : "bg-zinc-300"}`} />
+                  <span className="flex-1">{a.texto}</span>
+                  <span className="text-zinc-400">→</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+          <section className="card p-5">
+            <h2 className="text-lg font-semibold">Esta semana</h2>
+            <ul className="mt-3 space-y-3">
+              {semana.length === 0 && <li className="text-[15px] text-zinc-500">No hay tareas en curso esta semana.</li>}
+              {semana.map((i) => (
+                <li key={i.id}>
+                  <div className="flex justify-between gap-3 text-[15px]"><span className="truncate">{i.nombre}</span><span className="shrink-0 tabular-nums text-zinc-500">{i.avanceReal.toFixed(0)}%</span></div>
+                  <div className="mt-1.5"><Progress value={i.avanceReal} previsto={avancePrevistoItem(i, hoy)} small /></div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+
+        <details className="group mt-6">
+          <summary className="cursor-pointer list-none rounded-xl border border-zinc-200 bg-white px-5 py-3.5 text-[15px] font-medium text-zinc-700 hover:bg-zinc-50">
+            <span className="group-open:hidden">Ver más detalles (curva de avance, costos por rubro, fotos, hitos, actividad) ▾</span>
+            <span className="hidden group-open:inline">Ocultar detalles ▴</span>
+          </summary>
+          <div className="mt-4 grid gap-6 lg:grid-cols-2">
+            <Section title="Curva de avance"><div className="p-4"><CurvaAvance puntos={curva} hoy={hoy} real={r.avance.real} /></div></Section>
+            {r.presupuesto.costoDirecto > 0 && (
+              <Section title="Costo por rubro: previsto vs gastado">
+                <div className="p-5"><BarrasHorizontales formato={(n) => ars(n)} datos={r.presupuesto.rubros.filter((x) => x.subtotal > 0).map((x) => ({ label: x.rubro.nombre, valor: x.subtotal, extra: r.reales.porRubro.get(x.rubro.id) ?? 0 }))} /></div>
+              </Section>
+            )}
+            {fotos.length > 0 && (
+              <Section title="Últimas fotos">
+                <div className="grid grid-cols-3 gap-2 p-4">
+                  {fotos.map((f) => (
+                    <a key={f.id} href={`/api/archivos/${f.id}`} target="_blank" className="block aspect-square overflow-hidden rounded-lg bg-zinc-100">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/api/archivos/${f.id}`} alt={f.nombre} className="h-full w-full object-cover" />
+                    </a>
+                  ))}
+                </div>
+              </Section>
+            )}
+            <Section title="Hitos">
+              <ul className="divide-y divide-zinc-100">
+                {hitos.map((h) => <li key={h.id} className="flex justify-between px-5 py-2.5 text-sm"><span>{h.nombre}</span><span className="text-zinc-600">{fechaLarga(h.inicio)}</span></li>)}
+              </ul>
+            </Section>
+            <Section title="Actividad reciente">
+              <ul className="divide-y divide-zinc-100">
+                {actividad.map((a) => (
+                  <li key={a.id} className="px-5 py-2.5 text-xs">
+                    <span className="font-medium">{usuariosAct.find((u) => u.id === a.userId)?.nombre ?? "Sistema"}</span> · {a.accion} <span className="text-zinc-400">· {fechaHora(a.createdAt)}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          </div>
+        </details>
+      </div>
+    );
+  }
+
   return (
     <>
       <PageHeader title={obra.nombre} subtitle={subtitulo} actions={esArq && <Link href={`${b}/datos`} className="btn-secondary">Editar datos</Link>} />

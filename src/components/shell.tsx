@@ -13,7 +13,9 @@ const ICONOS = {
   mensajes: MessagesSquare, reportes: BarChart3, ia: Sparkles, equipo: Users, datos: Info, seguimiento: Activity, atras: ArrowLeft, cotizaciones: Scale, insumos: Tags, whatsapp: MessageCircle, historial: History,
 } as const;
 export type IconName = keyof typeof ICONOS;
-export type NavSection = { title?: string; links: { href: string; label: string; icon: IconName; badge?: number; exact?: boolean }[] };
+export type NavTab = { href: string; label: string; badge?: number; exact?: boolean };
+export type NavLink = { href: string; label: string; icon: IconName; badge?: number; exact?: boolean; tabs?: NavTab[]; match?: string[] };
+export type NavSection = { title?: string; links: NavLink[] };
 
 export function Shell({
   sections,
@@ -32,7 +34,10 @@ export function Shell({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const activo = (href: string, exact?: boolean) => (exact ? pathname === href : pathname === href || pathname.startsWith(href + "/"));
+  const activo1 = (href: string, exact?: boolean) => (exact ? pathname === href : pathname === href || pathname.startsWith(href + "/"));
+  // un ítem del menú está activo si lo está él o cualquiera de sus pestañas
+  const linkActivo = (l: NavLink) => activo1(l.href, l.exact) || (l.tabs ?? []).some((t) => activo1(t.href, t.exact)) || (l.match ?? []).some((m) => activo1(m));
+  const actual = sections.flatMap((x) => x.links).find((l) => l.tabs?.length && linkActivo(l));
 
   const nav = (
     <nav className="flex h-full flex-col">
@@ -48,15 +53,15 @@ export function Shell({
             <ul className="space-y-0.5">
               {s.links.map((l) => {
                 const Icon = ICONOS[l.icon];
-                const on = activo(l.href, l.exact);
+                const on = linkActivo(l);
                 return (
                   <li key={l.href}>
                     <Link
                       href={l.href}
                       onClick={() => setOpen(false)}
-                      className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm ${on ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100"}`}
+                      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] ${on ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100"}`}
                     >
-                      <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                      <Icon className="h-5 w-5 shrink-0" strokeWidth={1.75} />
                       <span className="flex-1 truncate">{l.label}</span>
                       {!!l.badge && <span className={`rounded-full px-1.5 text-[11px] font-medium ${on ? "bg-white/20" : "bg-amber-100 text-amber-800"}`}>{l.badge}</span>}
                     </Link>
@@ -105,7 +110,22 @@ export function Shell({
             {unread > 0 && <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">{unread}</span>}
           </Link>
         </header>
-        <main className="mx-auto max-w-7xl px-4 py-6 lg:px-8 lg:py-8">{children}</main>
+        <main className="mx-auto max-w-7xl px-4 py-6 lg:px-8 lg:py-8">
+          {actual?.tabs && (
+            <div className="-mt-1 mb-6 flex gap-1 overflow-x-auto border-b border-zinc-200">
+              {actual.tabs.map((t) => {
+                const on = activo1(t.href, t.exact) && !actual.tabs!.some((o) => o !== t && o.href.length > t.href.length && activo1(o.href, o.exact));
+                return (
+                  <Link key={t.href} href={t.href} className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-[15px] ${on ? "border-brand-700 font-medium text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}>
+                    {t.label}
+                    {!!t.badge && <span className="rounded-full bg-amber-100 px-1.5 text-xs font-medium text-amber-800">{t.badge}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );

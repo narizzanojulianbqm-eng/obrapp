@@ -33,7 +33,7 @@ export default async function Dashboard() {
         </Empty>
       ) : (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {comoArq.length === 0 && <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <Stat label="Obras activas" value={activas.length} hint={`${obras.length - activas.length} finalizadas`} />
             {comoArq.length > 0 ? (
               <>
@@ -44,11 +44,11 @@ export default async function Dashboard() {
             ) : (
               <Stat label="Tareas para hoy" value={misTareas.length} />
             )}
-          </div>
+          </div>}
 
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="space-y-4 lg:col-span-2">
-              <h2 className="h2">Obras en curso</h2>
+              <h2 className="text-lg font-semibold">Obras en curso</h2>
               {resumenes.map(({ obra, rol, r }) => (
                 <Link key={obra.id} href={`/obras/${obra.id}`} className="card card-pad block transition hover:border-zinc-300 hover:shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -97,9 +97,9 @@ export default async function Dashboard() {
             <div className="space-y-6">
               {comoArq.length > 0 && (
                 <div>
-                  <h2 className="h2 mb-3">Alertas</h2>
+                  <h2 className="mb-3 text-lg font-semibold">Necesita tu atención</h2>
                   <div className="space-y-2">
-                    {comoArq.flatMap((x) => x.r.alertas.filter((a) => a.nivel !== "info").map((a, i) => <Alerta key={x.obra.id + i} nivel={a.nivel} texto={`${x.obra.nombre}: ${a.texto}`} link={a.link} />))}
+                    {comoArq.flatMap((x) => x.r.alertas.filter((a) => a.nivel !== "info").map((a, i) => ({ k: x.obra.id + i, ...a, texto: `${x.obra.nombre}: ${a.texto}` }))).sort((a, z) => (a.nivel === "critico" ? 0 : 1) - (z.nivel === "critico" ? 0 : 1)).slice(0, 5).map(({ k, ...a }) => <Alerta key={k} {...a} />)}
                     {comoArq.every((x) => x.r.alertas.every((a) => a.nivel === "info")) && <p className="muted">Sin alertas importantes.</p>}
                   </div>
                 </div>

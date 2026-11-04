@@ -9,17 +9,16 @@ export default async function GlobalLayout({ children }: { children: React.React
   const sections: NavSection[] = [
     {
       links: [
-        { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+        { href: "/dashboard", label: "Inicio", icon: "dashboard" },
         { href: "/obras", label: "Mis obras", icon: "obras", exact: true },
-        { href: "/obras/nueva", label: "Crear obra", icon: "nueva" },
       ],
     },
     {
-      title: "Obras recientes",
+      title: "Obras en curso",
       links: obras.filter((o) => o.obra.estado !== "finalizada").slice(0, 6).map((o) => ({ href: `/obras/${o.obra.id}`, label: o.obra.nombre, icon: "obras" as const })),
     },
     {
-      title: "Estudio",
+      title: "Más",
       links: [
         { href: "/whatsapp", label: "WhatsApp", icon: "whatsapp" },
         { href: "/proveedores", label: "Proveedores", icon: "proveedores" },

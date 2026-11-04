@@ -20,12 +20,18 @@ export default async function ObraLayout({ children, params }: { children: React
 
   let sections: NavSection[];
   if (rol === "arquitecto") {
+    // 6 secciones; el detalle va en pestañas dentro de cada una
     sections = [
-      { title: "Obra", links: [{ href: b, label: "Resumen", icon: "dashboard", exact: true }, { href: `${b}/datos`, label: "Datos de obra", icon: "datos" }, { href: `${b}/equipo`, label: "Equipo", icon: "equipo" }, { href: `${b}/historial`, label: "Historial", icon: "historial" }] },
-      { title: "Planificación", links: [{ href: `${b}/rubros`, label: "Rubros y tareas", icon: "rubros" }, { href: `${b}/gantt`, label: "Diagrama de Gantt", icon: "gantt" }, { href: `${b}/seguimiento`, label: "Seguimiento", icon: "seguimiento" }] },
-      { title: "Planillas", links: [{ href: `${b}/computo`, label: "Cómputo de materiales", icon: "computo" }, { href: `${b}/precios`, label: "Análisis de precios", icon: "precios" }, { href: `${b}/presupuesto`, label: "Presupuesto", icon: "presupuesto" }, { href: `${b}/costos`, label: "Costos y beneficios", icon: "costos" }] },
-      { title: "Abastecimiento", links: [{ href: `${b}/solicitudes`, label: "Solicitudes", icon: "solicitudes", badge: Number(sol) }, { href: `${b}/compras`, label: "Compras", icon: "compras" }, { href: `${b}/cotizaciones`, label: "Cotizaciones", icon: "cotizaciones" }] },
-      { title: "Comunicación", links: [{ href: `${b}/mensajes`, label: "Mensajes", icon: "mensajes" }, { href: `${b}/documentos`, label: "Documentación", icon: "docs" }, { href: `${b}/asistente`, label: "Asistente IA", icon: "ia" }, { href: "/whatsapp", label: "WhatsApp", icon: "whatsapp" }, { href: `${b}/reporte`, label: "Reporte", icon: "reportes" }] },
+      {
+        links: [
+          { href: b, label: "Inicio", icon: "dashboard", exact: true },
+          { href: `${b}/gantt`, label: "Planificación", icon: "gantt", tabs: [{ href: `${b}/gantt`, label: "Cronograma" }, { href: `${b}/rubros`, label: "Tareas" }, { href: `${b}/seguimiento`, label: "Avance" }], match: [`${b}/tarea`] },
+          { href: `${b}/presupuesto`, label: "Presupuesto", icon: "presupuesto", tabs: [{ href: `${b}/presupuesto`, label: "Presupuesto" }, { href: `${b}/precios`, label: "Precios" }, { href: `${b}/computo`, label: "Materiales" }, { href: `${b}/costos`, label: "Costos y ganancia" }] },
+          { href: `${b}/solicitudes`, label: "Compras", icon: "compras", badge: Number(sol), tabs: [{ href: `${b}/solicitudes`, label: "Pedidos de obra", badge: Number(sol) }, { href: `${b}/compras`, label: "Compras" }, { href: `${b}/cotizaciones`, label: "Cotizaciones" }] },
+          { href: `${b}/mensajes`, label: "Comunicación", icon: "mensajes", tabs: [{ href: `${b}/mensajes`, label: "Mensajes" }, { href: `${b}/documentos`, label: "Documentos" }, { href: `${b}/asistente`, label: "Asistente" }] },
+          { href: `${b}/datos`, label: "Ajustes de obra", icon: "datos", tabs: [{ href: `${b}/datos`, label: "Datos" }, { href: `${b}/equipo`, label: "Equipo" }, { href: `${b}/reporte`, label: "Reportes" }, { href: `${b}/historial`, label: "Historial" }] },
+        ],
+      },
     ];
   } else if (rol === "cliente") {
     sections = [

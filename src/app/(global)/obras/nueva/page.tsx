@@ -1,12 +1,12 @@
-import { PageHeader } from "@/components/ui";
-import { ObraForm } from "@/components/forms/obra-form";
+import { NuevaObraWizard } from "@/components/forms/nueva-obra-wizard";
 import { crearObra } from "@/app/actions/obra";
 
 export default function NuevaObra() {
   return (
-    <div className="max-w-4xl">
-      <PageHeader title="Crear obra" subtitle="Con estos datos se generan automáticamente los rubros, el cómputo, los análisis de precios, el presupuesto y el Gantt. Todo se puede editar después." />
-      <ObraForm action={crearObra} nueva />
+    <div className="py-2">
+      <h1 className="mb-1 text-center text-2xl font-semibold tracking-tight">Nueva obra</h1>
+      <p className="mb-8 text-center text-[15px] text-zinc-500">Tres pasos y listo.</p>
+      <NuevaObraWizard action={crearObra} />
     </div>
   );
 }

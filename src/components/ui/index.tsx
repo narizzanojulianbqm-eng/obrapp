@@ -76,7 +76,7 @@ export function Field({ label, children, hint, className }: { label: string; chi
 export function Section({ title, actions, children, className }: { title: string; actions?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={`card ${className ?? ""}`}>
-      <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-3">
+      <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-3.5">
         <h2 className="h2">{title}</h2>
         {actions}
       </div>
