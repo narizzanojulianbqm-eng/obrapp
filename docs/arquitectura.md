@@ -84,3 +84,10 @@ Datos de obra + parámetros ──► cantidades (fórmulas de plantilla)
 - Pagos online de suscripciones con Mercado Pago o Stripe: el punto de enganche está en `cambiarPlan`.
 - Envío automático de cotizaciones por email (Resend/SMTP), por WhatsApp (plantilla) o por API del proveedor: la interfaz `CanalEnvio` está en `lib/integraciones.ts`.
 - Notificaciones por email: el punto de extensión está en `notificar()`.
+
+## Carga desde archivos (rubros y tareas)
+- Formatos: Excel (.xlsx/.csv), PDF con texto, Word (.docx), texto pegado y fotos (.jpg/.png).
+- Sin IA (gratis): `src/lib/importar/texto.ts` interpreta líneas "descripción · unidad · cantidad · [precio] · [total]" y títulos de rubro; las planillas se leen por encabezado (`src/lib/planillas.ts`). Las fotos se leen con OCR en el navegador (tesseract.js), sin enviar la imagen.
+- Con IA (si hay `ANTHROPIC_API_KEY`): PDF escaneados, fotos y textos desordenados se leen con Claude (`src/lib/importar/ia.ts`), descontando del cupo del plan.
+- `src/lib/importar/vinculo.ts` reconoce la tarea de plantilla equivalente: si el archivo no trae precio, se suman sus materiales y mano de obra; si trae precio, se respeta y la duración sale del rendimiento.
+- Siempre hay vista previa editable antes de guardar. En la obra de ejemplo de la demo solo se puede agregar.
