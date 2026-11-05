@@ -103,7 +103,12 @@ export function Shell({
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
           <div className="flex-1">
-            {demo && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">Entorno de prueba · datos ficticios</span>}
+            {demo && (
+              <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-800">Entorno de prueba · datos ficticios</span>
+                <Link href="/" className="hidden text-zinc-500 hover:text-zinc-900 sm:inline">← Qué es Obrapp</Link>
+              </span>
+            )}
           </div>
           <Link href="/notificaciones" className="relative rounded-md p-1.5 text-zinc-600 hover:bg-zinc-100" aria-label="Notificaciones">
             <Bell className="h-5 w-5" strokeWidth={1.75} />

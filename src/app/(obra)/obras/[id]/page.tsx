@@ -10,6 +10,8 @@ import { curvaPrevista, finDeObra, avancePrevistoItem } from "@/lib/engine/calcu
 import { diasCorridos, fechaLarga, hoyISO, sumarHabiles } from "@/lib/engine/calendario";
 import { SISTEMAS, TIPOS_OBRA } from "@/lib/engine/plantillas";
 import { clienteVe } from "@/lib/portal";
+import { modoDemo } from "@/lib/entorno";
+import { DemoGuia } from "@/components/demo-guia";
 import { hoyAR } from "@/lib/format";
 
 const sumarDiasCorridos = (f: string, d: number) => { const x = new Date(`${f}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10); };
@@ -17,7 +19,8 @@ const sumarDiasCorridos = (f: string, d: number) => { const x = new Date(`${f}T1
 export default async function ResumenObra({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ nueva?: string }> }) {
   const { id } = await params;
   const { nueva } = await searchParams;
-  const { rol, miembroId } = await requireObra(id);
+  const { rol, miembroId, user } = await requireObra(id);
+  const enDemo = modoDemo() && user.email.endsWith("@demo.com");
   const r = await resumenObra(id);
   const { obra } = r;
   const hoy = hoyISO();
@@ -44,6 +47,7 @@ export default async function ResumenObra({ params, searchParams }: { params: Pr
     return (
       <div className="mx-auto max-w-xl space-y-4">
         <PageHeader title={obra.nombre} subtitle={[obra.direccion, obra.localidad].filter(Boolean).join(", ")} />
+        {enDemo && <DemoGuia clave="obrero" titulo="Así lo ve el capataz desde el celular" pasos={[{ texto: "Cargá el parte del día con clima y fotos", href: `${b}/partes` }, { texto: "Pedí un material para mañana", href: `${b}/solicitudes` }, { texto: "Informá el avance de una tarea", href: `${b}/seguimiento` }]} />}
         <Link href={`${b}/partes`} className={`flex items-center justify-between rounded-2xl p-5 ${parteHoy ? "bg-brand-50 text-brand-800" : "bg-brand-700 text-white"}`}>
           <span>
             <span className="block text-lg font-semibold">{parteHoy ? "✓ Parte de hoy cargado" : "Cargar el parte del día"}</span>
@@ -105,6 +109,7 @@ export default async function ResumenObra({ params, searchParams }: { params: Pr
           <Link href={`${b}/datos`} className="btn-secondary px-4 py-2.5 text-[15px]">Editar obra</Link>
         </div>
 
+        {enDemo && <DemoGuia clave="arquitecto" titulo="Tres cosas para probar primero" pasos={[{ texto: "Cambiá un precio y mirá cómo se recalcula el presupuesto", href: `${b}/precios` }, { texto: "Mirá el cronograma y arrastrá una tarea", href: `${b}/gantt` }, { texto: "Descubrí cómo va a terminar la obra", href: `${b}/costos` }]} />}
         {nueva && (
           <div className="mb-6 rounded-2xl bg-brand-50 p-5 text-[15px] text-brand-900">
             <div className="text-base font-semibold">¡Obra creada! Ya se armaron las tareas, cantidades y el cronograma.</div>
@@ -218,6 +223,7 @@ export default async function ResumenObra({ params, searchParams }: { params: Pr
   return (
     <>
       <PageHeader title={obra.nombre} subtitle={subtitulo} actions={esArq && <Link href={`${b}/datos`} className="btn-secondary">Editar datos</Link>} />
+      {enDemo && !esArq && <DemoGuia clave="cliente" titulo="Así sigue la obra el dueño" pasos={[{ texto: "Mirá el avance con fotos", href: `${b}/seguimiento` }, { texto: "Revisá el presupuesto y los adicionales", href: `${b}/presupuesto` }, { texto: "Escribile a la arquitecta", href: `${b}/mensajes` }]} />}
 
       {nueva && esArq && (
         <div className="card mb-6 border-brand-500 bg-brand-50 p-5">

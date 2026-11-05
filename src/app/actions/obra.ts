@@ -1,4 +1,5 @@
 "use server";
+import { modoDemo } from "@/lib/entorno";
 import { hoyAR } from "@/lib/format";
 import { SECCIONES_PORTAL } from "@/lib/portal";
 import bcrypt from "bcryptjs";
@@ -148,6 +149,7 @@ export async function actualizarCoeficientes(obraId: string, _: FormState, fd: F
 
 export async function regenerarDesdePlantilla(obraId: string) {
   const { user, obra } = await assertObra(obraId, ["arquitecto"]);
+  if (demoProtegida(obra)) throw new Error("En la demo no se puede regenerar la obra de ejemplo. Creá una obra nueva para probarlo.");
   await db.delete(schema.rubros).where(eq(schema.rubros.obraId, obraId)); // cascada a ítems y recursos
   await generarDesdePlantilla(obra);
   await auditar(obraId, user.id, "rubros.regenerar");
@@ -155,8 +157,9 @@ export async function regenerarDesdePlantilla(obraId: string) {
 }
 
 export async function eliminarObra(obraId: string) {
-  const { user, esDueno } = await assertObra(obraId, ["arquitecto"]);
+  const { user, esDueno, obra } = await assertObra(obraId, ["arquitecto"]);
   if (!esDueno) throw new Error("Solo el titular puede eliminar la obra");
+  if (demoProtegida(obra)) throw new Error("La obra de ejemplo de la demo no se puede eliminar.");
   await db.delete(schema.obras).where(eq(schema.obras.id, obraId));
   await auditar(null, user.id, "obra.eliminar", obraId);
   redirect("/obras");
@@ -585,7 +588,16 @@ export async function importarPlanilla(obraId: string, filas: { rubro: string; n
 const pinNuevo = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
 const limpiarDni = (v: FormDataEntryValue | null) => String(v ?? "").replace(/\D/g, "");
 
+/** En el entorno de prueba, las obras y cuentas de ejemplo no se pueden borrar ni cambiar su acceso (las usa cualquiera que entre a la demo). */
+function demoProtegida(obra: { nombre: string }) {
+  return modoDemo() && obra.nombre.endsWith("(DEMO)");
+}
+
 async function fijarDniPin(userId: string, dni: string, pinIngresado: string): Promise<{ error?: string; pin?: string }> {
+  if (modoDemo()) {
+    const u = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
+    if (u?.email.endsWith("@demo.com")) return { error: "En la demo no se puede cambiar el acceso de las cuentas de ejemplo. Sumá una persona nueva para probarlo." };
+  }
   if (dni.length < 7 || dni.length > 9) return { error: "DNI inválido (sin puntos, 7 u 8 números)" };
   const pin = pinIngresado.replace(/\D/g, "") || pinNuevo();
   if (pin.length !== 6) return { error: "El PIN tiene que tener 6 números" };
