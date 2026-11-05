@@ -3,7 +3,7 @@
  * Los precios cargados son FICTICIOS, solo para mostrar el funcionamiento (no son precios de mercado).
  */
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, schema } from "../src/lib/db";
 import { generarDesdePlantilla, recalcularObra } from "../src/lib/obra-service";
 import { sumarHabiles, hoyISO } from "../src/lib/engine/calendario";
@@ -27,7 +27,8 @@ async function usuario(nombre: string, email: string, telefono?: string) {
 /** Agregados posteriores a la demo (idempotente: corre también sobre bases ya cargadas). */
 async function completarDemo() {
   const obrero = await db.query.users.findFirst({ where: eq(schema.users.email, "obrero@demo.com") });
-  const obra = await db.query.obras.findFirst({ where: eq(schema.obras.codigo, "OB-2026-0001") });
+  const ana = await db.query.users.findFirst({ where: eq(schema.users.email, "arquitecta@demo.com") });
+  const obra = ana ? await db.query.obras.findFirst({ where: and(eq(schema.obras.ownerId, ana.id), eq(schema.obras.codigo, "OB-2026-0001")) }) : undefined;
   if (!obrero || !obra) return;
   if (!obrero.dni) await db.update(schema.users).set({ dni: "30000000", pinHash: await bcrypt.hash("123456", 10) }).where(eq(schema.users.id, obrero.id));
   const hay = await db.query.partesDiarios.findFirst({ where: eq(schema.partesDiarios.obraId, obra.id) });

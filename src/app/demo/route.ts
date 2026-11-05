@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { createSession } from "@/lib/auth";
 import { modoDemo } from "@/lib/entorno";
@@ -15,7 +15,9 @@ export async function GET(req: NextRequest) {
   const u = await db.query.users.findFirst({ where: eq(schema.users.email, email) });
   if (!u) return NextResponse.redirect(new URL("/login", base));
   await createSession(u.id);
-  const obra = await db.query.obras.findFirst({ where: eq(schema.obras.codigo, "OB-2026-0001") });
+  // la obra de ejemplo es la de la arquitecta demo (otros usuarios pueden tener el mismo código)
+  const ana = await db.query.users.findFirst({ where: eq(schema.users.email, CUENTAS.arquitecto) });
+  const obra = ana ? await db.query.obras.findFirst({ where: and(eq(schema.obras.ownerId, ana.id), eq(schema.obras.codigo, "OB-2026-0001")) }) : undefined;
   const destino = obra ? (`/obras/${obra.id}`) : "/dashboard";
   return NextResponse.redirect(new URL(destino, base));
 }
