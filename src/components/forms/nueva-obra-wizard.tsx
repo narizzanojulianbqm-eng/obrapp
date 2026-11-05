@@ -113,6 +113,10 @@ export function NuevaObraWizard({ action }: { action: (s: FormState, f: FormData
         <div className="rounded-xl bg-brand-50 p-4 text-[15px] text-brand-900">
           Al crear la obra se arman solos los rubros, las cantidades, el presupuesto y el cronograma. Después podés ajustar todo.
         </div>
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-200 p-4 text-[15px] hover:bg-zinc-50">
+          <input type="checkbox" name="desdeArchivo" className="mt-1 h-4 w-4 accent-brand-700" />
+          <span><b>Ya tengo el presupuesto o el cómputo armado</b><span className="block text-sm text-zinc-500">Al crear la obra te llevamos a cargarlo desde Excel, PDF, Word o una foto.</span></span>
+        </label>
       </div>
 
       {state?.error && <p className="mt-6 rounded-xl bg-red-50 px-4 py-3 text-[15px] text-red-700">{state.error}</p>}

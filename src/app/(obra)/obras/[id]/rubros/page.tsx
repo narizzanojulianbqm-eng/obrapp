@@ -10,12 +10,15 @@ import { FORMULAS } from "@/lib/engine/plantillas";
 import { fechaCorta } from "@/lib/engine/calendario";
 import { num } from "@/lib/format";
 import { AsignarSelect, DependenciasEditor } from "./rubros-client";
-import { ImportarPlanilla } from "./importar";
+import { CargarDesdeArchivo } from "@/components/cargar-desde-archivo";
+import { aiDisponible } from "@/lib/ai";
+import { modoDemo } from "@/lib/entorno";
 import { SubmitButton } from "@/components/client";
 
-export default async function Rubros({ params }: { params: Promise<{ id: string }> }) {
+export default async function Rubros({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ importar?: string }> }) {
   const { id } = await params;
-  await requireObra(id, ["arquitecto"]);
+  const { importar } = await searchParams;
+  const { obra } = await requireObra(id, ["arquitecto"]);
   const { rubros, items, miembros } = await cargarObra(id);
   const comentarios = await db.select({ canal: schema.mensajes.canal, n: sql<number>`count(*)` }).from(schema.mensajes).where(and(eq(schema.mensajes.obraId, id), like(schema.mensajes.canal, "item:%"))).groupBy(schema.mensajes.canal);
   const nCom = new Map(comentarios.map((c) => [c.canal.slice(5), Number(c.n)]));
@@ -26,7 +29,7 @@ export default async function Rubros({ params }: { params: Promise<{ id: string 
     <>
       <PageHeader actions={<><a href={`/api/obras/${id}/excel`} className="btn-secondary">Exportar a Excel</a></>} title="Rubros y tareas" subtitle="Generados desde la plantilla según el tipo de obra y el sistema constructivo. Editá cantidades (la manual prevalece sobre la calculada), duraciones, responsables y dependencias: el cómputo, el presupuesto y el Gantt se actualizan solos." />
       <div className="space-y-5">
-        <ImportarPlanilla obraId={id} />
+        <CargarDesdeArchivo obraId={id} iaDisponible={aiDisponible()} abiertoInicial={importar === "1" || importar === "nueva"} modoInicial={importar === "nueva" ? "reemplazar" : "agregar"} demo={modoDemo() && obra.nombre.endsWith("(DEMO)")} />
         {rubros.map((r) => {
           const its = items.filter((i) => i.rubroId === r.id);
           return (

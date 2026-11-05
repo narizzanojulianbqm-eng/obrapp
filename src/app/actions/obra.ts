@@ -12,7 +12,7 @@ import { requireUser } from "@/lib/auth";
 import { assertObra, auditar, notificar } from "@/lib/access";
 import { generarDesdePlantilla, recalcularObra, siguienteCodigoObra } from "@/lib/obra-service";
 import { PLANES } from "@/lib/planes";
-import { PARAMETROS_INFO, parametrosPorDefecto, TIPOS_OBRA, SISTEMAS } from "@/lib/engine/plantillas";
+import { CATALOGO_INSUMOS, PARAMETROS_INFO, parametrosPorDefecto, TIPOS_OBRA, SISTEMAS } from "@/lib/engine/plantillas";
 import { generaCiclo } from "@/lib/engine/calculos";
 import { ajustarHabil } from "@/lib/engine/calendario";
 import { guardarArchivos } from "@/lib/files";
@@ -82,7 +82,7 @@ export async function crearObra(_: FormState, fd: FormData): Promise<FormState> 
 
   await generarDesdePlantilla(obra);
   await auditar(obra.id, user.id, "obra.crear", obra.nombre);
-  redirect(`/obras/${obra.id}?nueva=1`);
+  redirect(fd.get("desdeArchivo") ? `/obras/${obra.id}/rubros?importar=nueva` : `/obras/${obra.id}?nueva=1`);
 }
 
 export async function actualizarObra(obraId: string, _: FormState, fd: FormData): Promise<FormState> {
@@ -536,52 +536,118 @@ export async function setAvisosEmail(valor: boolean) {
 }
 
 // ───────── Importar planillas existentes (XLSX / CSV) ─────────
-export async function previsualizarPlanilla(obraId: string, fd: FormData) {
-  await assertObra(obraId, ["arquitecto"]);
-  const f = fd.get("archivo") as File | null;
-  if (!f || !f.size) return { filas: [], advertencias: ["Elegí un archivo .xlsx o .csv"] };
-  if (f.size > 5 * 1024 * 1024) return { filas: [], advertencias: ["El archivo supera 5 MB"] };
-  const { leerPlanilla } = await import("@/lib/planillas");
+export type FilaVista = { rubro: string; nombre: string; unidad: string; cantidad: number; precio: number | null; duracion: number | null; plantilla: { key: string; nombre: string } | null };
+export type ResultadoLectura = { filas: FilaVista[]; advertencias: string[]; fuente: string; necesitaOcr?: boolean; nota?: string };
+
+/** Lee un archivo (Excel, CSV, PDF, Word, foto) o un texto y devuelve la vista previa de rubros e ítems. No guarda nada. */
+export async function analizarArchivo(obraId: string, fd: FormData): Promise<ResultadoLectura> {
+  const { user } = await assertObra(obraId, ["arquitecto"]);
+  const { leerSinIA, TIPO } = await import("@/lib/importar/leer");
+  const { filasDesdeTexto } = await import("@/lib/importar/texto");
+  const { vincularPlantilla } = await import("@/lib/importar/vinculo");
+  const { aiDisponible, cupoIA } = await import("@/lib/ai");
+  const conIA = async () => aiDisponible() && (await cupoIA(obraId)).restante > 0;
+  const archivo = fd.get("archivo") as File | null;
+  const texto = String(fd.get("texto") ?? "").trim();
+  const origen = String(fd.get("origen") ?? "pegado");
+  let r: { filas: Omit<FilaVista, "plantilla">[]; advertencias: string[]; fuente: string; necesitaOcr?: boolean; nota?: string };
   try {
-    return await leerPlanilla(f);
-  } catch {
-    return { filas: [], advertencias: ["No pude leer el archivo. Guardalo como .xlsx o .csv e intentá de nuevo."] };
+    if (texto) {
+      r = { ...filasDesdeTexto(texto), fuente: origen === "ocr" ? "foto" : "texto" };
+      if (r.filas.length < 2 && (await conIA())) {
+        const { leerConIA } = await import("@/lib/importar/ia");
+        const ia = await leerConIA({ texto }, user.id, obraId);
+        if (ia.filas.length) r = { filas: ia.filas, advertencias: [], fuente: "ia", nota: ia.nota };
+      }
+    } else if (archivo && archivo.size) {
+      if (archivo.size > 4.4 * 1024 * 1024) return { filas: [], advertencias: ["El archivo supera 4 MB. Si es un PDF, probá exportarlo de nuevo o subir solo las páginas del presupuesto."], fuente: "" };
+      r = await leerSinIA(archivo);
+      const tipo = TIPO(archivo);
+      if ((r.necesitaOcr || (!r.filas.length && (tipo === "pdf" || tipo === "word"))) && (await conIA())) {
+        const { leerConIA } = await import("@/lib/importar/ia");
+        const ia = await leerConIA(r.necesitaOcr ? { archivo } : { texto: (r as { texto?: string }).texto ?? "" }, user.id, obraId);
+        if (ia.filas.length) r = { filas: ia.filas, advertencias: [], fuente: "ia", nota: ia.nota };
+      } else if (r.necesitaOcr && tipo === "pdf") {
+        r.advertencias = ["Este PDF es una imagen escaneada. Sacale una foto o captura a cada hoja y subila como imagen: la leemos en tu navegador."];
+        r.necesitaOcr = false;
+      }
+    } else return { filas: [], advertencias: ["Elegí un archivo o pegá el texto."], fuente: "" };
+  } catch (e) {
+    console.error("analizarArchivo", e);
+    return { filas: [], advertencias: ["No pude leer el archivo. Probá guardarlo en otro formato (Excel .xlsx o PDF) o pegá el texto."], fuente: "" };
   }
+  const filas = r.filas.map((f) => {
+    const v = vincularPlantilla(f.nombre, f.unidad, f.rubro);
+    return { ...f, plantilla: v ? { key: v.key, nombre: v.nombre } : null };
+  });
+  return { filas, advertencias: r.advertencias, fuente: r.fuente, necesitaOcr: r.necesitaOcr, nota: r.nota };
 }
 
-export async function importarPlanilla(obraId: string, filas: { rubro: string; nombre: string; unidad: string; cantidad: number; precio: number | null; duracion: number | null }[], modo: "agregar" | "reemplazar") {
-  const { user } = await assertObra(obraId, ["arquitecto"]);
+export async function importarPlanilla(obraId: string, filas: { rubro: string; nombre: string; unidad: string; cantidad: number; precio: number | null; duracion: number | null; vincular?: boolean }[], modo: "agregar" | "reemplazar") {
+  const { user, obra } = await assertObra(obraId, ["arquitecto"]);
   const validas = filas.filter((f) => f && typeof f.nombre === "string" && f.nombre.trim()).slice(0, 500);
   if (!validas.length) throw new Error("No hay filas para importar");
+  if (modo === "reemplazar" && demoProtegida(obra)) throw new Error("En la obra de ejemplo de la demo solo se puede agregar. Creá una obra nueva para reemplazar todo.");
+  const { vincularPlantilla } = await import("@/lib/importar/vinculo");
   if (modo === "reemplazar") await db.delete(schema.rubros).where(eq(schema.rubros.obraId, obraId));
   const existentes = await db.query.rubros.findMany({ where: eq(schema.rubros.obraId, obraId) });
   let orden = existentes.reduce((m, r) => Math.max(m, r.orden), 0);
   const ultimoItemPrevio = modo === "agregar" ? (await db.query.items.findMany({ where: eq(schema.items.obraId, obraId) })).sort((a, b) => (b.fin ?? "").localeCompare(a.fin ?? ""))[0] : undefined;
   let anterior: string | null = ultimoItemPrevio?.id ?? null;
   const porRubro = new Map<string, string>();
+  // insumos del catálogo ya presentes en la obra (para sumar materiales y mano de obra de las tareas reconocidas)
+  const insObra = await db.query.insumos.findMany({ where: eq(schema.insumos.obraId, obraId) });
+  const insumoPorClave = new Map(insObra.filter((i) => i.clave).map((i) => [i.clave!, i.id]));
+  const insumoDe = async (clave: string) => {
+    if (insumoPorClave.has(clave)) return insumoPorClave.get(clave)!;
+    const cat = CATALOGO_INSUMOS[clave];
+    if (!cat) return null;
+    const [n] = await db.insert(schema.insumos).values({ obraId, clave, ...cat, precio: 0 }).returning();
+    insumoPorClave.set(clave, n.id);
+    return n.id;
+  };
+  let vinculadas = 0, conMateriales = 0;
   for (const [k, f] of validas.entries()) {
-    let rubroId = porRubro.get(f.rubro) ?? existentes.find((r) => r.nombre.toLowerCase() === f.rubro.toLowerCase())?.id;
+    const rubroNombre = String(f.rubro || "Varios").trim() || "Varios";
+    let rubroId = porRubro.get(rubroNombre) ?? existentes.find((r) => r.nombre.toLowerCase() === rubroNombre.toLowerCase())?.id;
     if (!rubroId) {
       orden++;
-      const [r] = await db.insert(schema.rubros).values({ obraId, nombre: f.rubro.slice(0, 120), orden, codigo: String(orden).padStart(2, "0") }).returning();
+      const [r] = await db.insert(schema.rubros).values({ obraId, nombre: rubroNombre.slice(0, 120), orden, codigo: String(orden).padStart(2, "0") }).returning();
       rubroId = r.id;
     }
-    porRubro.set(f.rubro, rubroId);
+    porRubro.set(rubroNombre, rubroId);
+    const unidad = (f.unidad || "gl").slice(0, 20);
+    const cantidad = Math.max(0, Number(f.cantidad) || 0);
+    const v = f.vincular === false ? null : vincularPlantilla(f.nombre, unidad, rubroNombre);
+    const conPrecio = f.precio != null && f.precio > 0;
+    // tarea reconocida con precio propio: el precio manda y la duración sale del rendimiento de la plantilla
+    let duracionManual = f.duracion && f.duracion > 0 ? Math.round(f.duracion) : null;
+    if (v && conPrecio && !duracionManual) {
+      const hh = Object.entries(v.item.recursos).filter(([c]) => CATALOGO_INSUMOS[c]?.tipo === "mano_obra").reduce((a, [, c]) => a + c, 0);
+      if (hh > 0 && cantidad > 0) duracionManual = Math.max(1, Math.ceil((cantidad * hh) / Math.max(1, obra.cuadrillaHHdia)));
+    }
     const [it] = await db.insert(schema.items).values({
-      obraId, rubroId, orden: k + 1, nombre: f.nombre.slice(0, 200), unidad: (f.unidad || "gl").slice(0, 20),
-      cantidadCalc: 0, cantidadManual: Math.max(0, Number(f.cantidad) || 0), duracionManual: f.duracion && f.duracion > 0 ? Math.round(f.duracion) : null,
+      obraId, rubroId, orden: k + 1, nombre: f.nombre.slice(0, 200), unidad, plantillaKey: v?.key ?? null,
+      cantidadCalc: 0, cantidadManual: cantidad, duracionManual,
       predecesoras: anterior ? [{ id: anterior, tipo: "FC", desfase: 0 }] : [],
     }).returning();
     anterior = it.id;
-    if (f.precio != null && f.precio > 0) {
-      const [ins] = await db.insert(schema.insumos).values({ obraId, tipo: "material", nombre: `${f.nombre.slice(0, 150)} (precio global importado)`, unidad: it.unidad, precio: f.precio, precioActualizado: new Date() }).returning();
+    if (conPrecio) {
+      const [ins] = await db.insert(schema.insumos).values({ obraId, tipo: "material", nombre: `${f.nombre.slice(0, 150)} (precio global importado)`, unidad: it.unidad, precio: f.precio!, precioActualizado: new Date() }).returning();
       await db.insert(schema.recursos).values({ itemId: it.id, insumoId: ins.id, consumo: 1 });
+    } else if (v) {
+      conMateriales++;
+      for (const [clave, consumo] of Object.entries(v.item.recursos)) {
+        const insumoId = await insumoDe(clave);
+        if (insumoId) await db.insert(schema.recursos).values({ itemId: it.id, insumoId, consumo });
+      }
     }
+    if (v) vinculadas++;
   }
   await recalcularObra(obraId);
-  await auditar(obraId, user.id, "planilla.importar", `${validas.length} ítems (${modo})`);
+  await auditar(obraId, user.id, "planilla.importar", `${validas.length} ítems (${modo}), ${vinculadas} reconocidos`);
   revalidatePath(`/obras/${obraId}`, "layout");
-  return validas.length;
+  return { total: validas.length, vinculadas, conMateriales };
 }
 
 // ───────── Equipo de obra con DNI + PIN (sin email) ─────────

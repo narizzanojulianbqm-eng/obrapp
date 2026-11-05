@@ -114,7 +114,10 @@ export default async function ResumenObra({ params, searchParams }: { params: Pr
           <div className="mb-6 rounded-2xl bg-brand-50 p-5 text-[15px] text-brand-900">
             <div className="text-base font-semibold">¡Obra creada! Ya se armaron las tareas, cantidades y el cronograma.</div>
             <p className="mt-1">Próximo paso: cargá los precios para completar el presupuesto.</p>
-            <Link href={`${b}/precios`} className="btn-primary mt-3 px-4 py-2.5 text-[15px]">Cargar precios</Link>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link href={`${b}/precios`} className="btn-primary px-4 py-2.5 text-[15px]">Cargar precios</Link>
+              <Link href={`${b}/rubros?importar=1`} className="btn-secondary px-4 py-2.5 text-[15px]">📄 Ya tengo mi presupuesto: cargarlo desde Excel, PDF o foto</Link>
+            </div>
           </div>
         )}
 

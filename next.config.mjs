@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["@libsql/client"],
+  serverExternalPackages: ["@libsql/client", "unpdf", "mammoth"],
   experimental: { serverActions: { bodySizeLimit: "12mb" } },
   poweredByHeader: false,
   async headers() {

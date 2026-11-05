@@ -3,7 +3,8 @@ import ExcelJS from "exceljs";
 import { normalizar } from "./asistente/texto";
 import { parseMonto } from "./format";
 
-export type FilaImportada = { rubro: string; nombre: string; unidad: string; cantidad: number; precio: number | null; duracion: number | null };
+import { filasDesdeTexto, type FilaImportada } from "./importar/texto";
+export type { FilaImportada };
 
 /** Lee una planilla existente (XLSX o CSV) de rubros / ítems, detectando columnas por su encabezado. */
 export async function leerPlanilla(file: File): Promise<{ filas: FilaImportada[]; advertencias: string[] }> {
@@ -26,7 +27,11 @@ export async function leerPlanilla(file: File): Promise<{ filas: FilaImportada[]
       matriz.push(vals.map((x) => x ?? ""));
     });
   }
-  return interpretar(matriz);
+  const r = interpretar(matriz);
+  if (r.filas.length) return r;
+  // sin encabezado reconocible: se lee cada fila como una línea de texto
+  const t = filasDesdeTexto(matriz.map((f) => f.filter(Boolean).join(" ")).join("\n"));
+  return t.filas.length ? t : r;
 }
 
 function partirCSV(linea: string, sep: string): string[] {
